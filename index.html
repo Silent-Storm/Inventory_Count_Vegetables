@@ -87,6 +87,7 @@ td.bc{direction:ltr;text-align:right;font-family:monospace}
   <input id="url" dir="ltr" placeholder="https://docs.google.com/spreadsheets/d/...">
   <label>שם הגיליון (לשונית)</label><input id="tab" placeholder="ברירת מחדל: הלשונית הראשונה">
   <button class="btn" id="load" style="margin-top:10px;width:100%">טעינת מוצרים מהגיליון</button>
+  <label class="btn o" style="display:block;text-align:center;margin-top:8px">ייבוא מקובץ CSV<input type="file" id="fi" accept=".csv,text/csv" hidden></label>
   <p style="color:var(--mut);font-size:13px;line-height:1.6">העמודות בגיליון: ברקוד | שם מוצר | סוג מכירה (יחידה / משקל). שורה ראשונה היא כותרת. יש לשתף את הגיליון: "כל מי שיש לו את הקישור – צפייה".</p>
  </div>
  <div class="box">
@@ -165,17 +166,30 @@ function parseCSV(s){const r=[];let row=[],c='',q=false;
   else if(ch==='"')q=true;else if(ch===','){row.push(c);c=''}
   else if(ch==='\n'){row.push(c);r.push(row);row=[];c=''}else if(ch!=='\r')c+=ch}
  row.push(c);r.push(row);return r.filter(x=>x.some(y=>y.trim()))}
+function jsonp(u){return new Promise((ok,no)=>{const cb='ykcb'+Date.now(),el=document.createElement('script');
+ const cl=()=>{clearTimeout(t);delete window[cb];el.remove()};const t=setTimeout(()=>{cl();no('timeout')},12000);
+ window[cb]=r=>{cl();ok(r)};el.onerror=()=>{cl();no('load')};el.src=u+'&tqx=out:json;responseHandler:'+cb;document.head.appendChild(el)})}
+function tbl(r){const t=r.table;const lab=t.cols.map(c=>(c.label||'').trim());
+ const data=t.rows.map(x=>(x.c||[]).map(c=>{if(!c||c.v==null)return '';let v=c.f!=null?String(c.f):String(c.v);return /^[\d,]+$/.test(v)?v.replace(/,/g,''):v}));
+ return lab.some(Boolean)?[lab,...data]:data}
+function ingest(rows){
+ const h=rows[0].map(x=>x.trim().toLowerCase());
+ let ib=h.findIndex(x=>/ברקוד|barcode|קוד/.test(x)),inn=h.findIndex(x=>/שם|name|מוצר/.test(x)),it=h.findIndex(x=>/סוג|מכירה|type|יחידה|משקל/.test(x));
+ if(ib<0)ib=0;if(inn<0||inn===ib)inn=1;if(it<0)it=2;
+ const np=rows.slice(1).map(r=>{const ty=(r[it]||'').trim();return{b:(r[ib]||'').trim(),n:(r[inn]||'').trim(),t:/משקל|ק"?ג|קילו|kg|weight/i.test(ty)?'w':'u'}}).filter(p=>p.b&&p.n);
+ if(!np.length)throw 'empty';
+ P=np;save('yk_p',P);render();toast(`נטענו ${P.length} מוצרים`);document.querySelector('[data-t=cnt]').click()}
 $('load').onclick=async()=>{
  const m=$('url').value.match(/\/d\/([\w-]+)/);if(!m)return toast('קישור לא תקין');
  S.url=$('url').value;S.tab=$('tab').value;save('yk_s',S);
- const u=`https://docs.google.com/spreadsheets/d/${m[1]}/gviz/tq?tqx=out:csv`+(S.tab?`&sheet=${encodeURIComponent(S.tab)}`:'');
- try{toast('טוען...');const r=await fetch(u);if(!r.ok)throw 0;const rows=parseCSV(await r.text());
-  const h=rows[0].map(x=>x.trim().toLowerCase());
-  let ib=h.findIndex(x=>/ברקוד|barcode|קוד/.test(x)),inn=h.findIndex(x=>/שם|name|מוצר/.test(x)),it=h.findIndex(x=>/סוג|מכירה|type|יחידה|משקל/.test(x));
-  if(ib<0)ib=0;if(inn<0||inn===ib)inn=1;if(it<0)it=2;
-  P=rows.slice(1).map(r=>({b:(r[ib]||'').trim(),n:(r[inn]||'').trim(),t:/משקל|ק"?ג|קילו|kg|weight|w/i.test(r[it]||'')&&!/^יחיד/.test((r[it]||'').trim())?'w':'u'})).filter(p=>p.b&&p.n);
-  save('yk_p',P);render();toast(`נטענו ${P.length} מוצרים`);document.querySelector('[data-t=cnt]').click()
- }catch(e){toast('הטעינה נכשלה. בדקו שיתוף הגיליון וחיבור לאינטרנט')}};
+ const base=`https://docs.google.com/spreadsheets/d/${m[1]}/gviz/tq?headers=1`+(S.tab?`&sheet=${encodeURIComponent(S.tab)}`:'');
+ toast('טוען...');
+ try{ingest(tbl(await jsonp(base)));return}catch(e){}
+ try{const r=await fetch(base+'&tqx=out:csv');if(!r.ok)throw 0;ingest(parseCSV(await r.text()));return}catch(e){}
+ toast('הטעינה נכשלה. שתפו את הגיליון ל"כל מי שיש לו הקישור" או ייבאו קובץ CSV')};
+$('fi').onchange=async e=>{const f=e.target.files[0];if(!f)return;
+ try{ingest(parseCSV((await f.text()).replace(/^\ufeff/,'')))}catch(x){toast('הקובץ לא תקין. נדרשות עמודות: ברקוד, שם, סוג')}e.target.value=''};
+window.onerror=m=>toast('שגיאה: '+m);
 
 /* manual add */
 $('madd').onclick=()=>{const b=$('mbc').value.trim(),n=$('mnm').value.trim();if(!b||!n)return toast('נא למלא ברקוד ושם');
@@ -195,7 +209,8 @@ function report(){
  $('report').innerHTML=`<div class="rh"><h2>דוח ספירת מלאי ירקות</h2><div>סניף: <b>${esc(S.branch||'—')}</b><br>סופר: <b>${esc(S.who||'—')}</b><br>תאריך: ${ds}</div></div>
  ${R.length?`<table><thead><tr><th>#</th><th>ברקוד</th><th>מוצר</th><th>סוג</th><th>כמות</th></tr></thead><tbody>${R.map((p,i)=>`<tr><td>${i+1}</td><td class="bc">${esc(p.b)}</td><td>${esc(p.n)}</td><td>${p.t==='w'?'משקל':'יחידה'}</td><td><b>${fmt(p,C[p.b])}</b> ${unit(p)}</td></tr>`).join('')}</tbody></table>
  <div class="tot"><span>מוצרים: ${R.length}</span><span>סה״כ יחידות: ${uq}</span><span>סה״כ משקל: ${fmt({t:'w'},kg)} ק״ג</span></div>
- <div class="sig"><span>חתימת הסופר</span><span>חתימת מנהל</span></div>`:'<div class="empty">עדיין לא נספרו מוצרים.</div>'}
+ <div class="sig"><span>חתימת הסופר</span><span>חתימת מנהל</span></div>`:'<div class="empty">עדיין לא נספרו מוצרים.</div>'}`
+}
 
 /* whatsapp / csv / sheet */
 $('wa').onclick=()=>{const R=rows();if(!R.length)return toast('אין נתונים לשליחה');
