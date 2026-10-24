@@ -132,6 +132,7 @@ td.bc{direction:ltr;text-align:right;font-family:monospace}
   <button class="btn" id="load" style="margin-top:10px;width:100%">טעינת מוצרים מהגיליון</button>
   <label class="btn o" style="display:block;text-align:center;margin-top:8px">ייבוא מקובץ CSV<input type="file" id="fi" accept=".csv,text/csv" hidden></label>
   <small id="syncinfo" style="display:block;color:var(--mut);margin-top:6px"></small>
+  <div id="mapbox" style="display:none;margin-top:10px;border-top:2px solid var(--line);padding-top:8px"><b>מיפוי עמודות</b><div id="mapinfo" style="font-size:13px;color:var(--mut);margin-top:4px"></div><div id="mapsel"></div><button class="btn o" id="mapreset" style="width:100%;margin-top:8px">איפוס לזיהוי אוטומטי</button></div>
   <button class="btn o" id="tp" style="width:100%;margin-top:8px">הורדת תבנית גיליון (CSV)</button>
   <p style="color:var(--mut);font-size:13px;line-height:1.6">העמודות בגיליון: ברקוד | שם מוצר | סוג מכירה (יחידה / משקל) | כמות בארגז (למשל 14) | מלאי במערכת (אופציונלי, להצגת הפרשים בדוח). שורה ראשונה היא כותרת. לשונית נוספת בשם "ארגזים" (ברקוד | סוג ארגז | כמות בארגז) מגדירה כמה סוגי ארגז לכל ברקוד ומשמשת בהעברות. אם מוצר נמכר בארגז, מספיק להזין מספר ארגזים והסכום מחושב אוטומטית. יש לשתף את הגיליון: "כל מי שיש לו את הקישור – צפייה".</p>
  </div>
@@ -271,13 +272,26 @@ function jsonp(u){return new Promise((ok,no)=>{const cb='ykcb'+Date.now(),el=doc
 function tbl(r){const t=r.table;const lab=t.cols.map(c=>(c.label||'').trim());
  const data=t.rows.map(x=>(x.c||[]).map(c=>{if(!c||c.v==null)return '';let v=c.f!=null?String(c.f):String(c.v);return /^[\d,]+$/.test(v)?v.replace(/,/g,''):v}));
  return lab.some(Boolean)?[lab,...data]:data}
-function ingest(rows){
- const h=rows[0].map(x=>x.trim().toLowerCase());
- let ib=h.findIndex(x=>/ברקוד|barcode|קוד/.test(x)),inn=h.findIndex(x=>/שם|name|מוצר/.test(x)),it=h.findIndex(x=>/סוג|מכירה|type|יחידה|משקל/.test(x)),ik=h.findIndex(x=>/ארגז|קרטון|כרטון|box|carton/.test(x)),is=h.findIndex(x=>/מלאי|מערכת|stock|system/.test(x));
+function ingest(rows,quiet){
+ try{save('yk_raw',rows)}catch(e){}
+ S.hdr=rows[0].map(x=>String(x).trim());
+ const sig=S.hdr.join('|');if(S.sig&&S.sig!==sig)S.map={};S.sig=sig;
+ const h=S.hdr.map(x=>x.toLowerCase()),M=S.map||{};
+ let ib=h.findIndex(x=>/ברקוד|barcode|קוד/.test(x)),inn=h.findIndex(x=>/שם|name|מוצר/.test(x)),it=h.findIndex(x=>/סוג|מכירה|type|יחידה|משקל/.test(x)),ik=h.findIndex(x=>/ארגז|קרטון|כרטון|אריז|box|carton|pack/.test(x)),is=h.findIndex(x=>/מלאי|מערכת|stock|system/.test(x));
  if(ib<0)ib=0;if(inn<0||inn===ib)inn=1;if(it<0||it===ik)it=2;if(ik<0&&h.length>3&&is!==3)ik=3;
- const np=rows.slice(1).map(r=>{const ty=(r[it]||'').trim();return{b:(r[ib]||'').trim(),n:(r[inn]||'').trim(),t:/משקל|ק"?ג|קילו|kg|weight/i.test(ty)?'w':'u',k:ik>=0?(parseFloat(String(r[ik]||'').replace(',','.'))||0):0,s:is>=0?(v=>isNaN(v)?null:v)(parseFloat(String(r[is]||'').replace(',','.'))):null}}).filter(p=>p.b&&p.n);
+ const mp=(key,cur)=>M[key]!==undefined&&M[key]!==''?+M[key]:cur;
+ ib=mp('b',ib);inn=mp('n',inn);it=mp('t',it);ik=mp('k',ik);is=mp('s',is);
+ S.det={b:ib,n:inn,t:it,k:ik,s:is};
+ const np=rows.slice(1).map(r=>{const ty=(r[it]||'').trim();return{b:(r[ib]||'').trim(),n:(r[inn]||'').trim(),t:/משקל|ק"?ג|קילו|kg|weight/i.test(ty)?'w':'u',k:ik>=0?num(r[ik]):0,s:is>=0?(String(r[is]||'').trim()===''?null:num(r[is])):null}}).filter(p=>p.b&&p.n);
  if(!np.length)throw 'empty';
- P=np;save('yk_p',P);S.sync=Date.now();save('yk_s',S);showSync();render();toast(`נטענו ${P.length} מוצרים`);document.querySelector('[data-t=cnt]').click()}
+ P=np;save('yk_p',P);if(!quiet)S.sync=Date.now();save('yk_s',S);showSync();render();renderMap();
+ if(!quiet){toast(`נטענו ${P.length} מוצרים · ${P.filter(p=>p.k>0).length} עם כמות בארגז`);document.querySelector('[data-t=cnt]').click()}}
+function renderMap(){const hd=S.hdr||[],box=$('mapbox');if(!hd.length){box.style.display='none';return}box.style.display='block';
+ const d=S.det||{},F=[['b','ברקוד'],['n','שם מוצר'],['t','סוג מכירה (יחידה / משקל)'],['k','כמות בארגז'],['s','מלאי במערכת (אופציונלי)']];
+ $('mapsel').innerHTML=F.map(([k,l])=>`<label>${l}</label><select data-m="${k}">${(k==='k'||k==='s'?'<option value="-1">ללא</option>':'')+hd.map((x,i)=>`<option value="${i}"${i===d[k]?' selected':''}>${esc(x||('עמודה '+(i+1)))}</option>`).join('')}</select>`).join('');
+ $('mapinfo').textContent=`${P.length} מוצרים · ${P.filter(p=>p.k>0).length} עם כמות בארגז`+(d.k<0?' · עמודת "כמות בארגז" לא זוהתה, בחרו אותה ידנית':'')}
+$('mapsel').onchange=e=>{const t=e.target;if(!t.dataset.m)return;S.map=S.map||{};S.map[t.dataset.m]=t.value;save('yk_s',S);const raw=LS('yk_raw',null);if(raw){try{ingest(raw,true);toast('המיפוי עודכן')}catch(x){toast('המיפוי לא תקין')}}};
+$('mapreset').onclick=()=>{S.map={};save('yk_s',S);const raw=LS('yk_raw',null);if(raw){try{ingest(raw,true);toast('המיפוי אופס')}catch(x){}}};
 $('load').onclick=async()=>{
  const m=$('url').value.match(/\/d\/([\w-]+)/);if(!m)return toast('קישור לא תקין');
  S.url=$('url').value;S.tab=$('tab').value;save('yk_s',S);
@@ -437,7 +451,7 @@ $('scan').onclick=()=>startScan(code=>{$('q').value=code;render();
  if(!P.some(p=>p.b===code))toast('ברקוד לא נמצא ברשימה');else{const i=$('list').querySelector('input');i&&i.focus()}});
 $('tscan').onclick=()=>startScan(code=>{$('tq').value=code;tSearch(true);if(!SEL)toast('ברקוד לא נמצא ברשימה')});
 
-showSync();render();
+showSync();render();renderMap();
 if(!P.length)$('load').click();
 </script>
 </body>
