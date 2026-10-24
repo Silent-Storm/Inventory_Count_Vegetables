@@ -39,6 +39,8 @@ input:focus{outline:3px solid var(--lime);border-color:var(--g2)}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .chip{background:#e6efd8;border-radius:20px;padding:5px 11px;font-size:13px;font-weight:600;cursor:pointer}
 .empty{text-align:center;color:var(--mut);padding:40px 10px;line-height:1.7}
+.flt{display:flex;gap:6px;margin-bottom:10px}.flt button{flex:1;border:2px solid var(--line);background:#fff;border-radius:20px;padding:8px;font:600 14px Heebo;color:var(--mut)}.flt button.on{background:var(--g);border-color:var(--g);color:#fff}
+.diff.p{color:#1a7f37}.diff.m{color:var(--red)}.diff{font-weight:800}
 label{display:block;font-weight:600;margin:12px 0 4px}
 .box{background:#fff;border:2px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
 pre{direction:ltr;text-align:left;background:#f0f2e8;padding:10px;border-radius:8px;overflow:auto;font-size:12px;white-space:pre-wrap}
@@ -71,12 +73,14 @@ td.bc{direction:ltr;text-align:right;font-family:monospace}
 <section class="view on" id="v-cnt">
  <div class="bar"><input id="q" type="search" placeholder="חיפוש לפי שם או ברקוד" autocomplete="off"><button class="btn l" id="scan">סרוק</button></div>
  <div class="stat"><div>נספרו <b id="s1">0</b></div><div>מתוך <b id="s2">0</b> מוצרים</div></div>
+ <div class="flt" id="flt"><button class="on" data-f="all">הכל</button><button data-f="todo">לא נספרו</button><button data-f="done">נספרו</button></div>
  <div id="list"></div>
 </section>
 
 <section class="view" id="v-rep">
  <div class="bar noprint" style="flex-wrap:wrap">
-  <button class="btn" onclick="window.print()">הדפסת דוח</button>
+  <button class="btn" id="prt">הדפסת דוח</button>
+  <button class="btn o" id="dl">הורדת דוח</button>
   <button class="btn wa" id="wa">שליחה בוואטסאפ</button>
   <button class="btn o" id="csv">ייצוא ברקוד וכמות</button>
   <button class="btn o" id="push">שליחה לגיליון</button>
@@ -91,10 +95,13 @@ td.bc{direction:ltr;text-align:right;font-family:monospace}
   <label>שם הגיליון (לשונית)</label><input id="tab" placeholder="ברירת מחדל: הלשונית הראשונה">
   <button class="btn" id="load" style="margin-top:10px;width:100%">טעינת מוצרים מהגיליון</button>
   <label class="btn o" style="display:block;text-align:center;margin-top:8px">ייבוא מקובץ CSV<input type="file" id="fi" accept=".csv,text/csv" hidden></label>
-  <p style="color:var(--mut);font-size:13px;line-height:1.6">העמודות בגיליון: ברקוד | שם מוצר | סוג מכירה (יחידה / משקל) | כמות בארגז (למשל 14). שורה ראשונה היא כותרת. אם מוצר נמכר בארגז, מספיק להזין מספר ארגזים והסכום מחושב אוטומטית. יש לשתף את הגיליון: "כל מי שיש לו את הקישור – צפייה".</p>
+  <small id="syncinfo" style="display:block;color:var(--mut);margin-top:6px"></small>
+  <button class="btn o" id="tp" style="width:100%;margin-top:8px">הורדת תבנית גיליון (CSV)</button>
+  <p style="color:var(--mut);font-size:13px;line-height:1.6">העמודות בגיליון: ברקוד | שם מוצר | סוג מכירה (יחידה / משקל) | כמות בארגז (למשל 14) | מלאי במערכת (אופציונלי, להצגת הפרשים בדוח). שורה ראשונה היא כותרת. אם מוצר נמכר בארגז, מספיק להזין מספר ארגזים והסכום מחושב אוטומטית. יש לשתף את הגיליון: "כל מי שיש לו את הקישור – צפייה".</p>
  </div>
  <div class="box">
-  <label style="margin-top:0">שם הסניף</label><input id="branch">
+  <label style="margin-top:0">שם העסק (לכותרת הדוח)</label><input id="co">
+  <label>שם הסניף</label><input id="branch">
   <label>שם הסופר</label><input id="who">
   <label>מספר וואטסאפ לשליחה (עם קידומת מדינה, למשל 972501234567)</label><input id="wanum" dir="ltr" inputmode="tel">
   <label>קישור Apps Script לשמירת הספירה בגיליון (אופציונלי)</label><input id="script" dir="ltr" placeholder="https://script.google.com/macros/s/.../exec">
@@ -103,6 +110,8 @@ td.bc{direction:ltr;text-align:right;font-family:monospace}
  var d=JSON.parse(e.postData.contents);
  var ss=SpreadsheetApp.getActive();
  var s=ss.getSheetByName('ספירה')||ss.insertSheet('ספירה');
+ s.getRange('D:D').setNumberFormat('@');
+ if(s.getLastRow()===0)s.appendRow(['תאריך','סניף','סופר','ברקוד','מוצר','סוג','כמות בארגז','ארגזים','בודדים','סה"כ','במערכת','הפרש']);
  d.rows.forEach(function(r){s.appendRow([d.date,d.branch,d.who].concat(r))});
  return ContentService.createTextOutput('ok');
 }</pre><p style="font-size:13px;color:var(--mut)">פרסום: Deploy › New deployment › Web app › Anyone.</p></details>
@@ -114,6 +123,8 @@ td.bc{direction:ltr;text-align:right;font-family:monospace}
   <input id="mbx" type="number" inputmode="decimal" placeholder="כמות בארגז אחד (אופציונלי)" style="margin-top:8px">
   <button class="btn l" id="madd" style="margin-top:8px;width:100%">הוספה</button>
  </div>
+ <div class="box"><b>גיבוי ושחזור</b>
+  <div class="bar" style="margin:8px 0 0"><button class="btn o" id="bk" style="flex:1">גיבוי הספירה</button><label class="btn o" style="flex:1;text-align:center;margin:0">שחזור<input type="file" id="rs" accept=".json,application/json" hidden></label></div></div>
  <button class="btn r" id="reset" style="width:100%">איפוס הספירה</button>
 </section>
 </main>
@@ -140,6 +151,9 @@ const loose=p=>rnd(ent(p).filter(e=>e.x==='q').reduce((a,e)=>a+e.n,0));
 const tot=p=>rnd(ent(p).reduce((a,e)=>a+(e.x==='b'?e.n*kk(p):e.n),0));
 const detail=p=>{const bx=boxes(p),lo=loose(p),r=[];if(bx)r.push(`${bx} ארגזים × ${kk(p)}`);if(lo)r.push(`${lo} ${bx?'בודדים':unit(p)}`);return r.join(' + ')};
 const counted=()=>P.filter(p=>ent(p).length);
+let F='all';
+const dif=p=>rnd(tot(p)-p.s);
+const dfx=p=>{const d=dif(p);return `<div class="diff ${d<0?'m':'p'}" style="font-size:13px">${d===0?'תואם':'הפרש '+(d>0?'+':'')+d}</div>`};
 function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',2800)}
 window.onerror=m=>toast('שגיאה: '+m);
 
@@ -152,15 +166,15 @@ document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
 /* product cards */
 function card(p){const e=ent(p),has=e.length,k=kk(p);
  return `<div class="item ${has?'done':''}" data-b="${esc(p.b)}"><div class="top"><div class="n"><b>${esc(p.n)}<span class="tag ${p.t}">${unit(p)}</span></b><span>${esc(p.b)}</span></div>
- <div class="tt">${has?`${tot(p)} <small>${unit(p)}</small>`:''}</div></div>
+ <div class="tt">${has?`${tot(p)} <small>${unit(p)}</small>`:''}${has&&p.s!=null?dfx(p):''}</div></div>
  <div class="ctl"><input type="number" inputmode="decimal" min="0" step="any" placeholder="${k?'מספר ארגזים':'כמות'}">
  ${k?`<button class="btn" data-a="b">+ ארגזים</button><button class="btn o" data-a="q">+ ${p.t==='w'?'ק״ג':'בודדים'}</button>`:`<button class="btn" data-a="q">+ הוסף</button>`}</div>
- <div class="meta"><span>${k?`ארגז = ${k} ${unit(p)}`:''}</span><a data-a="k">${k?'שינוי גודל ארגז':'הגדרת ארגז'}</a></div>
+ <div class="meta"><span>${k?`ארגז = ${k} ${unit(p)}`:''}${p.s!=null?`${k?' · ':''}במערכת: ${p.s}`:''}</span><a data-a="k">${k?'שינוי גודל ארגז':'הגדרת ארגז'}</a></div>
  ${has?`<div class="chips">${e.map((x,i)=>`<span class="chip" data-a="d" data-i="${i}">${x.x==='b'?x.n+' ארגזים':x.n+' '+unit(p)} ✕</span>`).join('')}</div>`:''}</div>`}
 const cardEl=b=>[...$('list').children].find(x=>x.dataset&&x.dataset.b===b);
 function render(){
  const q=$('q').value.trim().toLowerCase();
- const arr=P.filter(p=>!q||p.n.toLowerCase().includes(q)||p.b.includes(q));
+ const arr=P.filter(p=>(!q||p.n.toLowerCase().includes(q)||p.b.includes(q))&&(F==='all'||(F==='done')===(ent(p).length>0)));
  $('list').innerHTML=arr.length?arr.map(card).join('')
   :`<div class="empty">${P.length?'לא נמצא מוצר. אפשר להוסיף אותו ידנית בהגדרות.':'אין מוצרים עדיין.<br>בהגדרות הדביקו קישור לגיליון Google Sheets ולחצו "טעינת מוצרים".'}</div>`;
  stats();
@@ -181,6 +195,7 @@ $('list').addEventListener('click',e=>{const t=e.target.closest('[data-a]');if(!
 $('list').addEventListener('keydown',e=>{if(e.key!=='Enter'||e.target.tagName!=='INPUT')return;
  const it=e.target.closest('.item'),p=P.find(x=>x.b===it.dataset.b);add(p.b,kk(p)?'b':'q',e.target)});
 $('q').oninput=render;
+$('flt').onclick=e=>{const b=e.target.closest('[data-f]');if(!b)return;F=b.dataset.f;[...$('flt').children].forEach(x=>x.classList.toggle('on',x===b));render()};
 
 /* sheet */
 function parseCSV(s){const r=[];let row=[],c='',q=false;
@@ -197,11 +212,11 @@ function tbl(r){const t=r.table;const lab=t.cols.map(c=>(c.label||'').trim());
  return lab.some(Boolean)?[lab,...data]:data}
 function ingest(rows){
  const h=rows[0].map(x=>x.trim().toLowerCase());
- let ib=h.findIndex(x=>/ברקוד|barcode|קוד/.test(x)),inn=h.findIndex(x=>/שם|name|מוצר/.test(x)),it=h.findIndex(x=>/סוג|מכירה|type|יחידה|משקל/.test(x)),ik=h.findIndex(x=>/ארגז|קרטון|כרטון|box|carton/.test(x));
- if(ib<0)ib=0;if(inn<0||inn===ib)inn=1;if(it<0||it===ik)it=2;if(ik<0&&h.length>3)ik=3;
- const np=rows.slice(1).map(r=>{const ty=(r[it]||'').trim();return{b:(r[ib]||'').trim(),n:(r[inn]||'').trim(),t:/משקל|ק"?ג|קילו|kg|weight/i.test(ty)?'w':'u',k:ik>=0?(parseFloat(String(r[ik]||'').replace(',','.'))||0):0}}).filter(p=>p.b&&p.n);
+ let ib=h.findIndex(x=>/ברקוד|barcode|קוד/.test(x)),inn=h.findIndex(x=>/שם|name|מוצר/.test(x)),it=h.findIndex(x=>/סוג|מכירה|type|יחידה|משקל/.test(x)),ik=h.findIndex(x=>/ארגז|קרטון|כרטון|box|carton/.test(x)),is=h.findIndex(x=>/מלאי|מערכת|stock|system/.test(x));
+ if(ib<0)ib=0;if(inn<0||inn===ib)inn=1;if(it<0||it===ik)it=2;if(ik<0&&h.length>3&&is!==3)ik=3;
+ const np=rows.slice(1).map(r=>{const ty=(r[it]||'').trim();return{b:(r[ib]||'').trim(),n:(r[inn]||'').trim(),t:/משקל|ק"?ג|קילו|kg|weight/i.test(ty)?'w':'u',k:ik>=0?(parseFloat(String(r[ik]||'').replace(',','.'))||0):0,s:is>=0?(v=>isNaN(v)?null:v)(parseFloat(String(r[is]||'').replace(',','.'))):null}}).filter(p=>p.b&&p.n);
  if(!np.length)throw 'empty';
- P=np;save('yk_p',P);render();toast(`נטענו ${P.length} מוצרים`);document.querySelector('[data-t=cnt]').click()}
+ P=np;save('yk_p',P);S.sync=Date.now();save('yk_s',S);showSync();render();toast(`נטענו ${P.length} מוצרים`);document.querySelector('[data-t=cnt]').click()}
 $('load').onclick=async()=>{
  const m=$('url').value.match(/\/d\/([\w-]+)/);if(!m)return toast('קישור לא תקין');
  S.url=$('url').value;S.tab=$('tab').value;save('yk_s',S);
@@ -213,37 +228,53 @@ $('load').onclick=async()=>{
 $('fi').onchange=async e=>{const f=e.target.files[0];if(!f)return;
  try{ingest(parseCSV((await f.text()).replace(/^\ufeff/,'')))}catch(x){toast('הקובץ לא תקין. נדרשות עמודות: ברקוד, שם, סוג, כמות בארגז')}e.target.value=''};
 
+function showSync(){$('syncinfo').textContent=S.sync?'עודכן לאחרונה: '+new Date(S.sync).toLocaleString('he-IL'):''}
+$('tp').onclick=()=>{const t='\ufeffברקוד,שם מוצר,סוג מכירה,כמות בארגז,מלאי במערכת\n7290000000011,עגבניות,משקל,14,120\n7290000000028,מלפפון,משקל,10,80\n7290000000035,חסה,יחידה,12,60\n';const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/csv'}));a.download='תבנית-גיליון.csv';a.click()};
+
 /* manual add */
 $('madd').onclick=()=>{const b=$('mbc').value.trim(),n=$('mnm').value.trim();if(!b||!n)return toast('נא למלא ברקוד ושם');
  if(P.some(p=>p.b===b))return toast('הברקוד כבר קיים');P.unshift({b,n,t:$('mty').value,k:parseFloat($('mbx').value)||0});save('yk_p',P);
  $('mbc').value=$('mnm').value=$('mbx').value='';render();toast('המוצר נוסף')};
 
 /* settings */
-['branch','who','wanum','script'].forEach(k=>{$(k).value=S[k]||'';$(k).onchange=()=>{S[k]=$(k).value.trim();save('yk_s',S);stats()}});
+['co','branch','who','wanum','script'].forEach(k=>{$(k).value=S[k]||'';$(k).onchange=()=>{S[k]=$(k).value.trim();save('yk_s',S);stats()}});
 $('url').value=S.url||'';$('tab').value=S.tab||'';
 $('reset').onclick=()=>{if(confirm('למחוק את כל הכמויות שנספרו?')){C={};save('yk_c2',C);render();toast('הספירה אופסה')}};
 
 /* report */
-function report(){
+function reportHTML(){
  const R=counted(),d=new Date(),ds=d.toLocaleDateString('he-IL')+' '+d.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'});
  const bx=rnd(R.reduce((a,p)=>a+boxes(p),0)),uq=rnd(R.filter(p=>p.t==='u').reduce((a,p)=>a+tot(p),0)),kg=rnd(R.filter(p=>p.t==='w').reduce((a,p)=>a+tot(p),0));
- $('report').innerHTML=`<div class="rh"><h2>דוח ספירת מלאי ירקות</h2><div>סניף: <b>${esc(S.branch||'—')}</b><br>סופר: <b>${esc(S.who||'—')}</b><br>תאריך: ${ds}</div></div>`+
- (R.length?`<table><thead><tr><th>#</th><th>ברקוד</th><th>מוצר</th><th>פירוט</th><th>סה״כ</th></tr></thead><tbody>${R.map((p,i)=>`<tr><td>${i+1}</td><td class="bc">${esc(p.b)}</td><td>${esc(p.n)}</td><td>${detail(p)}</td><td><b>${tot(p)}</b> ${unit(p)}</td></tr>`).join('')}</tbody></table>
- <div class="tot"><span>מוצרים: ${R.length}</span><span>ארגזים: ${bx}</span><span>יחידות: ${uq}</span><span>משקל: ${kg} ק״ג</span></div>
+ const sys=R.some(p=>p.s!=null),gaps=R.filter(p=>p.s!=null&&dif(p)!==0).length;
+ return `<div class="rh"><div><h2>דוח ספירת מלאי ירקות</h2>${S.co?`<div style="font-size:15px;font-weight:700">${esc(S.co)}</div>`:''}</div><div>סניף: <b>${esc(S.branch||'—')}</b><br>סופר: <b>${esc(S.who||'—')}</b><br>תאריך: ${ds}</div></div>`+
+ (R.length?`<table><thead><tr><th>#</th><th>ברקוד</th><th>מוצר</th><th>פירוט</th><th>סה״כ</th>${sys?'<th>במערכת</th><th>הפרש</th>':''}</tr></thead><tbody>${R.map((p,i)=>`<tr><td>${i+1}</td><td class="bc">${esc(p.b)}</td><td>${esc(p.n)}</td><td>${detail(p)}</td><td><b>${tot(p)}</b> ${unit(p)}</td>${sys?(p.s!=null?`<td>${p.s}</td><td class="diff ${dif(p)<0?'m':'p'}">${dif(p)>0?'+':''}${dif(p)}</td>`:'<td>—</td><td>—</td>'):''}</tr>`).join('')}</tbody></table>
+ <div class="tot"><span>מוצרים: ${R.length}</span><span>ארגזים: ${bx}</span><span>יחידות: ${uq}</span><span>משקל: ${kg} ק״ג</span>${sys?`<span>מוצרים עם הפרש: ${gaps}</span>`:''}</div>
  <div class="sig"><span>חתימת הסופר</span><span>חתימת מנהל</span></div>`:'<div class="empty">עדיין לא נספרו מוצרים.</div>');
 }
+function report(){$('report').innerHTML=reportHTML()}
+const REPCSS="body{font-family:Heebo,Arial,sans-serif;color:#1b2a20;margin:0;padding:18px}.rh{display:flex;justify-content:space-between;border-bottom:4px solid #1f5130;padding-bottom:10px;margin-bottom:12px}.rh h2{margin:0;color:#1f5130;font-size:24px}.rh div{font-size:13px;line-height:1.7}table{width:100%;border-collapse:collapse;font-size:13px}th{background:#1f5130;color:#fff;padding:8px;text-align:right;-webkit-print-color-adjust:exact;print-color-adjust:exact}td{padding:7px 8px;border-bottom:1px solid #dfe4d6}tbody tr:nth-child(even){background:#f6f8f1;-webkit-print-color-adjust:exact;print-color-adjust:exact}td.bc{direction:ltr;text-align:right;font-family:monospace}.tot{margin-top:14px;display:flex;flex-wrap:wrap;gap:8px 20px;font-weight:700;border-top:3px solid #1f5130;padding-top:10px}.sig{display:flex;justify-content:space-between;margin-top:46px;font-size:13px}.sig span{border-top:1px solid #000;padding-top:4px;width:40%;text-align:center}.diff.p{color:#1a7f37}.diff.m{color:#d6452f}.diff{font-weight:700}tr{break-inside:avoid}@page{margin:14mm}.empty{text-align:center;padding:40px}";
+function docHTML(auto){return '<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>דוח ספירת מלאי</title><link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;700&display=swap" rel="stylesheet"><style>'+REPCSS+'</style></head><body>'+reportHTML()+(auto?'<script>onload=function(){setTimeout(function(){print()},500)}<\/script>':'')+'</body></html>'}
+function dlReport(){if(!counted().length)return toast('אין נתונים להורדה');
+ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([docHTML(false)],{type:'text/html;charset=utf-8'}));a.download='דוח-ספירה-'+new Date().toISOString().slice(0,10)+'.html';a.click()}
+function printReport(){if(!counted().length)return toast('אין נתונים להדפסה');
+ const w=open(URL.createObjectURL(new Blob([docHTML(true)],{type:'text/html;charset=utf-8'})),'_blank');
+ if(!w){toast('החלון נחסם. הורדתי את הדוח כקובץ, פתחו והדפיסו אותו');dlReport()}}
+$('prt').onclick=printReport;$('dl').onclick=dlReport;
 
 /* whatsapp / csv / sheet */
 $('wa').onclick=()=>{const R=counted();if(!R.length)return toast('אין נתונים לשליחה');
- const t=`*דוח ספירת מלאי ירקות*\nסניף: ${S.branch||'-'}\nסופר: ${S.who||'-'}\nתאריך: ${new Date().toLocaleDateString('he-IL')}\n\n`+R.map(p=>`• ${p.n}: *${tot(p)} ${unit(p)}*${boxes(p)?` (${detail(p)})`:''}`).join('\n');
+ const t=`*דוח ספירת מלאי ירקות*\nסניף: ${S.branch||'-'}\nסופר: ${S.who||'-'}\nתאריך: ${new Date().toLocaleDateString('he-IL')}\n\n`+R.map(p=>`• ${p.n}: *${tot(p)} ${unit(p)}*${boxes(p)?` (${detail(p)})`:''}${p.s!=null&&dif(p)?` | הפרש ${dif(p)>0?'+':''}${dif(p)}`:''}`).join('\n');
  open(`https://wa.me/${(S.wanum||'').replace(/\D/g,'')}?text=${encodeURIComponent(t)}`,'_blank')};
-const line=p=>[p.b,p.n,p.t==='w'?'משקל':'יחידה',kk(p)||'',boxes(p),loose(p),tot(p)];
+const line=p=>[p.b,p.n,p.t==='w'?'משקל':'יחידה',kk(p)||'',boxes(p),loose(p),tot(p),p.s!=null?p.s:'',p.s!=null?dif(p):''];
 $('csv').onclick=()=>{const R=counted();if(!R.length)return toast('אין נתונים לייצוא');
  const q=v=>`"${String(v).replace(/"/g,'""')}"`;
- const t='\ufeffברקוד,שם מוצר,סוג,כמות בארגז,ארגזים,בודדים,סה"כ\n'+R.map(p=>line(p).map(q).join(',')).join('\n');
+ const t='\ufeffברקוד,שם מוצר,סוג,כמות בארגז,ארגזים,בודדים,סה"כ,במערכת,הפרש\n'+R.map(p=>line(p).map(q).join(',')).join('\n');
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/csv'}));a.download=`ספירה-${new Date().toISOString().slice(0,10)}.csv`;a.click()};
 $('push').onclick=async()=>{const R=counted();if(!S.script)return toast('הזינו קישור Apps Script בהגדרות');if(!R.length)return toast('אין נתונים');
  try{await fetch(S.script,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({date:new Date().toLocaleString('he-IL'),branch:S.branch||'',who:S.who||'',rows:R.map(line)})});toast('נשלח לגיליון')}catch(e){toast('השליחה נכשלה')}};
+
+$('bk').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({C,K,P})],{type:'application/json'}));a.download='גיבוי-ספירה-'+new Date().toISOString().slice(0,10)+'.json';a.click()};
+$('rs').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const d=JSON.parse(await f.text());if(!d.C)throw 0;C=d.C;K=d.K||{};if(d.P&&d.P.length)P=d.P;save('yk_c2',C);save('yk_k',K);save('yk_p',P);render();toast('הספירה שוחזרה')}catch(x){toast('קובץ גיבוי לא תקין')}e.target.value=''};
 
 /* camera scan */
 let stream,timer;
@@ -259,7 +290,7 @@ $('scan').onclick=async()=>{
    if(!P.some(p=>p.b===code))toast('ברקוד לא נמצא ברשימה');else{const i=$('list').querySelector('input');i&&i.focus()}}}catch(e){}},300)
  }catch(e){toast('אין הרשאה למצלמה')}};
 
-render();
+showSync();render();
 if(!P.length)$('load').click();
 </script>
 </body>
