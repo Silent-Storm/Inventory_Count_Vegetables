@@ -90,9 +90,9 @@ td.bc{direction:ltr;text-align:right;font-family:monospace}
   <div id="tres"></div>
   <div id="tform" style="display:none;border-top:2px solid var(--line);margin-top:8px;padding-top:8px">
    <b id="tname"></b>
-   <div id="tboxrow"><label>סוג ארגז</label><select id="tsel"></select><label>מספר ארגזים</label><input id="tbx" type="number" inputmode="numeric" min="0" step="1"></div>
-   <label>בודדים (מחוץ לארגזים)</label><input id="tlo" type="number" inputmode="decimal" min="0" step="any">
-   <button class="btn" id="tadd" style="width:100%;margin-top:10px">הוספה להעברה</button>
+   <div id="tboxrow"><label>סוג ארגז</label><select id="tsel"></select></div>
+   <label id="tqlbl">מספר ארגזים</label><input id="tbx" type="number" inputmode="decimal" min="0" step="any">
+   <div class="ctl" style="margin-top:10px"><button class="btn" id="tadd" style="flex:2">+ הוספה</button><button class="btn o" id="tdone">סיום מוצר</button></div>
   </div>
  </div>
  <div id="titems"></div>
@@ -146,7 +146,7 @@ td.bc{direction:ltr;text-align:right;font-family:monospace}
  if(d.kind==='transfer'){
   var t=ss.getSheetByName('העברות')||ss.insertSheet('העברות');
   t.getRange('E:E').setNumberFormat('@');
-  if(t.getLastRow()===0)t.appendRow(['תאריך','מס׳ העברה','מסניף','לסניף','ברקוד','מוצר','סוג ארגז','כמות בארגז','ארגזים','בודדים','סה"כ','הערה']);
+  if(t.getLastRow()===0)t.appendRow(['תאריך','מס׳ העברה','מסניף','לסניף','ברקוד','מוצר','סוג ארגז','כמות בארגז','ארגזים','סה"כ','הערה']);
   d.rows.forEach(function(r){t.appendRow([d.date,d.no,d.from,d.to].concat(r).concat([d.note]))});
   return ContentService.createTextOutput('ok');
  }
@@ -335,10 +335,12 @@ $('rs').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const d=JS
 /* transfer */
 const tnum=()=>(S.tno||0)+1;
 const unitOf=i=>i.t==='w'?'ק״ג':'יח׳';
-const itTot=i=>rnd(i.bx*i.k+i.lo);
-const itLine=i=>{const r=[];if(i.bx)r.push(`${i.bx} × ${i.bt||'ארגז'}${i.k?` (${i.k})`:''}`);if(i.lo)r.push(`${i.lo} ${i.bx?'בודדים':unitOf(i)}`);return r.join(' + ')};
-const sumBoxes=its=>{const m={};its.forEach(i=>{if(i.bx){const k=i.bt||'ארגז';m[k]=(m[k]||0)+i.bx}});return m};
-const trTotals=its=>({kg:rnd(its.filter(i=>i.t==='w').reduce((a,i)=>a+itTot(i),0)),un:rnd(its.filter(i=>i.t!=='w').reduce((a,i)=>a+itTot(i),0)),bx:rnd(its.reduce((a,i)=>a+i.bx,0))});
+const qn=i=>rnd((i.e||[]).reduce((a,x)=>a+x,0));
+const itTot=i=>i.q?qn(i):rnd(qn(i)*i.k);
+const itLine=i=>i.q?`${qn(i)} ${unitOf(i)}`:`${qn(i)} × ${i.bt||'ארגז'} (${i.k})`;
+const sumBoxes=its=>{const m={};its.forEach(i=>{if(!i.q&&qn(i)){const k=i.bt||'ארגז';m[k]=rnd((m[k]||0)+qn(i))}});return m};
+const trTotals=its=>({kg:rnd(its.filter(i=>i.t==='w').reduce((a,i)=>a+itTot(i),0)),un:rnd(its.filter(i=>i.t!=='w').reduce((a,i)=>a+itTot(i),0)),bx:rnd(its.filter(i=>!i.q).reduce((a,i)=>a+qn(i),0))});
+const norm=i=>{if(!i.e){i.q=!i.bt;i.e=[i.q?(i.lo||0):(i.bx||0)].filter(x=>x>0);if(i.q&&!i.k)i.k=1;delete i.bx;delete i.lo}};
 const saveT=()=>{save('yk_t',T);save('yk_th',H)};
 const curT=()=>({no:tnum(),date:new Date().toLocaleString('he-IL'),from:T.from,to:T.to,note:T.note,items:T.items});
 let SEL=null;
@@ -351,24 +353,23 @@ function tSearch(auto){const q=$('tq').value.trim().toLowerCase();
 function pick(b){SEL=P.find(p=>p.b===b);if(!SEL)return;$('tres').innerHTML='';$('tq').value='';
  const o=opts(SEL);$('tform').style.display='block';$('tname').textContent=SEL.n+' · '+SEL.b;
  $('tsel').innerHTML=o.map((x,i)=>`<option value="${i}">${esc(x.n)} — ${x.k} ${unit(SEL)}</option>`).join('');
- $('tboxrow').style.display=o.length?'block':'none';$('tbx').value='';$('tlo').value='';(o.length?$('tbx'):$('tlo')).focus()}
-function tAdd(){if(!SEL)return;const o=opts(SEL),bx=parseFloat($('tbx').value)||0,lo=parseFloat($('tlo').value)||0;
- if(bx<=0&&lo<=0)return toast('הזינו כמות');if(bx%1)return toast('מספר ארגזים חייב להיות שלם');
- if(bx>0&&!o.length)return toast('אין סוג ארגז למוצר');
- if(SEL.t==='u'&&lo%1)return toast('כמות בודדים חייבת להיות שלמה');
- const ty=bx>0?o[+$('tsel').value]:{n:'',k:0};
- const ex=T.items.find(i=>i.b===SEL.b&&i.bt===ty.n&&i.k===ty.k);
- if(ex){ex.bx+=bx;ex.lo=rnd(ex.lo+lo)}else T.items.push({b:SEL.b,n:SEL.n,t:SEL.t,bt:ty.n,k:ty.k,bx,lo:rnd(lo)});
- saveT();SEL=null;$('tform').style.display='none';renderT();navigator.vibrate&&navigator.vibrate(30);$('tq').focus()}
+ $('tboxrow').style.display=o.length?'block':'none';$('tqlbl').textContent=o.length?'מספר ארגזים':'כמות ('+unit(SEL)+')';$('tbx').value='';$('tbx').focus()}
+function tAdd(){if(!SEL)return;const o=opts(SEL),v=parseFloat($('tbx').value)||0,q=!o.length;
+ if(!(v>0))return toast('הזינו כמות');
+ if((!q||SEL.t==='u')&&v%1)return toast('כאן נדרש מספר שלם');
+ const ty=q?{n:'',k:1}:o[+$('tsel').value]||o[0];
+ let ex=T.items.find(i=>i.b===SEL.b&&i.bt===ty.n&&i.k===ty.k&&!!i.q===q);
+ if(!ex){ex={b:SEL.b,n:SEL.n,t:SEL.t,bt:ty.n,k:ty.k,q,e:[]};T.items.unshift(ex)}
+ ex.e.push(rnd(v));saveT();$('tbx').value='';renderT();navigator.vibrate&&navigator.vibrate(30);$('tbx').focus()}
 function renderT(){const its=T.items;$('tno').textContent='העברה מס׳ '+tnum();
  if(!$('tfrom').value&&S.branch&&!T.from){$('tfrom').value=S.branch;T.from=S.branch;saveT()}
- $('titems').innerHTML=its.length?its.map((i,x)=>`<div class="item done"><div class="top"><div class="n"><b>${esc(i.n)}</b><span>${esc(i.b)}</span><div style="font-size:14px;margin-top:3px">${itLine(i)}</div></div><div class="tt">${itTot(i)} <small>${unitOf(i)}</small></div></div><div class="meta"><span></span><a data-td="${x}">מחיקה</a></div></div>`).join(''):'<div class="empty">עדיין לא נוספו מוצרים להעברה.</div>';
+ $('titems').innerHTML=its.length?its.map((i,x)=>`<div class="item done"><div class="top"><div class="n"><b>${esc(i.n)}</b><span>${esc(i.b)}</span><div style="font-size:14px;margin-top:3px">${itLine(i)}</div></div><div class="tt">${itTot(i)} <small>${unitOf(i)}</small></div></div><div class="chips">${i.e.map((v,j)=>`<span class="chip" data-tc="${x}:${j}">${v} ${i.q?unitOf(i):'ארגזים'} ✕</span>`).join('')}</div><div class="meta"><span></span><a data-td="${x}">מחיקת המוצר</a></div></div>`).join(''):'<div class="empty">עדיין לא נוספו מוצרים להעברה.</div>';
  const tt=trTotals(its),sb=sumBoxes(its);
  $('tsum').innerHTML=its.length?`<div class="box"><b>סיכום ארגזים</b>${Object.keys(sb).map(k=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line)"><span>${esc(k)}</span><b>${sb[k]}</b></div>`).join('')||'<div style="color:var(--mut)">אין ארגזים</div>'}<div class="tot" style="margin-top:10px;font-size:14px"><span>פריטים: ${its.length}</span><span>ארגזים: ${tt.bx}</span><span>יחידות: ${tt.un}</span><span>משקל: ${tt.kg} ק״ג</span></div></div>`:'';
  $('thist').innerHTML=H.length?`<div class="box"><b>העברות קודמות</b>`+H.map((h,x)=>[h,x]).reverse().slice(0,15).map(([h,x])=>`<div style="padding:8px 0;border-bottom:1px solid var(--line)"><div>#${h.no} · ${esc(h.date)} · ${esc(h.from||'—')} אל ${esc(h.to||'—')} · ${h.items.length} פריטים</div><div class="bar" style="margin:6px 0 0"><button class="btn o" data-hp="${x}" style="padding:7px 12px">הדפסה</button><button class="btn wa" data-hw="${x}" style="padding:7px 12px">וואטסאפ</button><button class="btn o" data-hd="${x}" style="padding:7px 12px">מחיקה</button></div></div>`).join('')+'</div>':''}
 function trHTML(tr){const its=tr.items,tt=trTotals(its),sb=sumBoxes(its);
  return `<div class="rh"><div><h2>תעודת העברה מס׳ ${tr.no}</h2>${S.co?`<div style="font-size:15px;font-weight:700">${esc(S.co)}</div>`:''}</div><div>מסניף: <b>${esc(tr.from||'—')}</b><br>לסניף: <b>${esc(tr.to||'—')}</b><br>תאריך: ${esc(tr.date)}${tr.note?`<br>הערה: ${esc(tr.note)}`:''}</div></div>`+
- `<table><thead><tr><th>#</th><th>ברקוד</th><th>מוצר</th><th>סוג ארגז</th><th>ארגזים</th><th>בודדים</th><th>סה״כ</th><th>התקבל</th></tr></thead><tbody>${its.map((i,x)=>`<tr><td>${x+1}</td><td class="bc">${esc(i.b)}</td><td>${esc(i.n)}</td><td>${i.bx?esc(i.bt||'ארגז')+(i.k?` (${i.k})`:''):'—'}</td><td>${i.bx||'—'}</td><td>${i.lo||'—'}</td><td><b>${itTot(i)}</b> ${unitOf(i)}</td><td style="text-align:center">☐</td></tr>`).join('')}</tbody></table>`+
+ `<table><thead><tr><th>#</th><th>ברקוד</th><th>מוצר</th><th>סוג ארגז</th><th>ארגזים</th><th>סה״כ</th><th>התקבל</th></tr></thead><tbody>${its.map((i,x)=>`<tr><td>${x+1}</td><td class="bc">${esc(i.b)}</td><td>${esc(i.n)}</td><td>${i.q?'—':esc(i.bt||'ארגז')+` (${i.k})`}</td><td>${i.q?'—':qn(i)}</td><td><b>${itTot(i)}</b> ${unitOf(i)}</td><td style="text-align:center">☐</td></tr>`).join('')}</tbody></table>`+
  `<h3 style="margin:18px 0 6px;color:#1f5130">סיכום ארגזים</h3><table style="width:60%"><thead><tr><th>סוג ארגז</th><th>כמות</th><th>התקבל</th></tr></thead><tbody>${Object.keys(sb).map(k=>`<tr><td>${esc(k)}</td><td><b>${sb[k]}</b></td><td style="text-align:center">☐</td></tr>`).join('')||'<tr><td colspan="3">—</td></tr>'}</tbody></table>`+
  `<div class="tot"><span>פריטים: ${its.length}</span><span>ארגזים: ${tt.bx}</span><span>יחידות: ${tt.un}</span><span>משקל: ${tt.kg} ק״ג</span></div><div class="sig"><span style="width:28%">חתימת השולח</span><span style="width:28%">חתימת הנהג</span><span style="width:28%">חתימת המקבל</span></div>`}
 function shell(body,auto){return '<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>תעודת העברה</title><link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;700&display=swap" rel="stylesheet"><style>'+REPCSS+'</style></head><body>'+body+(auto?'<script>onload=function(){setTimeout(function(){print()},500)}<\/script>':'')+'</body></html>'}
@@ -380,12 +381,15 @@ function outTr(tr,dl){if(!tr.items.length)return toast('אין מוצרים בה
 function trText(tr){const sb=sumBoxes(tr.items),tt=trTotals(tr.items);
  return `*תעודת העברה מס׳ ${tr.no}*\nמסניף: ${tr.from||'-'}\nלסניף: ${tr.to||'-'}\nתאריך: ${tr.date}${tr.note?`\nהערה: ${tr.note}`:''}\n\n`+tr.items.map(i=>`• ${i.n} (${i.b}): ${itLine(i)} = *${itTot(i)} ${unitOf(i)}*`).join('\n')+`\n\n*ארגזים:*\n`+(Object.keys(sb).map(k=>`${k}: ${sb[k]}`).join('\n')||'-')+`\n\nסה״כ: ${tt.kg} ק״ג${tt.un?` + ${tt.un} יח׳`:''}`}
 const waTr=tr=>{if(!tr.items.length)return toast('אין מוצרים בהעברה');open(`https://wa.me/${(S.wanum||'').replace(/\D/g,'')}?text=${encodeURIComponent(trText(tr))}`,'_blank')};
-const trRows=tr=>tr.items.map(i=>[i.b,i.n,i.bt||'',i.k||'',i.bx,i.lo,itTot(i)]);
+const trRows=tr=>tr.items.map(i=>[i.b,i.n,i.q?'':(i.bt||'ארגז'),i.q?'':i.k,i.q?'':qn(i),itTot(i)]);
 [['tfrom','from'],['tto','to'],['tnote','note']].forEach(([id,k])=>{$(id).value=T[k]||'';$(id).onchange=()=>{T[k]=$(id).value.trim();saveT()}});
 $('tq').oninput=()=>tSearch(false);$('tq').onkeydown=e=>{if(e.key==='Enter')tSearch(true)};
 $('tres').onclick=e=>{const d=e.target.closest('[data-pk]');if(d)pick(d.dataset.pk)};
-$('tadd').onclick=tAdd;$('tbx').onkeydown=$('tlo').onkeydown=e=>{if(e.key==='Enter')tAdd()};
-$('titems').onclick=e=>{const d=e.target.closest('[data-td]');if(d){T.items.splice(+d.dataset.td,1);saveT();renderT()}};
+$('tadd').onclick=tAdd;$('tbx').onkeydown=e=>{if(e.key==='Enter')tAdd()};
+$('tdone').onclick=()=>{SEL=null;$('tform').style.display='none';$('tq').focus()};
+$('titems').onclick=e=>{const c=e.target.closest('[data-tc]');
+ if(c){const [x,j]=c.dataset.tc.split(':').map(Number);T.items[x].e.splice(j,1);if(!T.items[x].e.length)T.items.splice(x,1);saveT();renderT();return}
+ const d=e.target.closest('[data-td]');if(d){T.items.splice(+d.dataset.td,1);saveT();renderT()}};
 $('thist').onclick=e=>{const t=e.target.closest('button');if(!t)return;
  if(t.dataset.hp!==undefined)outTr(H[+t.dataset.hp]);
  else if(t.dataset.hw!==undefined)waTr(H[+t.dataset.hw]);
@@ -393,12 +397,13 @@ $('thist').onclick=e=>{const t=e.target.closest('button');if(!t)return;
 $('tpr').onclick=()=>outTr(curT());$('tdl').onclick=()=>outTr(curT(),true);$('twa').onclick=()=>waTr(curT());
 $('tcp').onclick=()=>{if(!T.items.length)return toast('אין מוצרים בהעברה');copyText(trText(curT()))};
 $('tcsv').onclick=()=>{const tr=curT();if(!tr.items.length)return toast('אין מוצרים בהעברה');const q=v=>`"${String(v).replace(/"/g,'""')}"`;
- dlFile('\ufeffמס׳ העברה,תאריך,מסניף,לסניף,ברקוד,מוצר,סוג ארגז,כמות בארגז,ארגזים,בודדים,סה"כ\n'+trRows(tr).map(r=>[tr.no,tr.date,tr.from,tr.to,...r].map(q).join(',')).join('\n'),`העברה-${tr.no}.csv`,'text/csv')};
+ dlFile('\ufeffמס׳ העברה,תאריך,מסניף,לסניף,ברקוד,מוצר,סוג ארגז,כמות בארגז,ארגזים,סה"כ\n'+trRows(tr).map(r=>[tr.no,tr.date,tr.from,tr.to,...r].map(q).join(',')).join('\n'),`העברה-${tr.no}.csv`,'text/csv')};
 $('tpush').onclick=async()=>{const tr=curT();if(!S.script)return toast('הזינו קישור Apps Script בהגדרות');if(!tr.items.length)return toast('אין מוצרים בהעברה');
  try{await fetch(S.script,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({kind:'transfer',no:tr.no,date:tr.date,from:tr.from,to:tr.to,note:tr.note,rows:trRows(tr)})});toast('נשלח לגיליון')}catch(e){toast('השליחה נכשלה')}};
 $('tcl').onclick=()=>{if(!T.items.length)return toast('אין מוצרים בהעברה');if(!confirm('לסגור את ההעברה ולשמור אותה בהיסטוריה?'))return;
  H.push(curT());S.tno=tnum();save('yk_s',S);T={from:T.from,to:T.to,note:'',items:[]};$('tnote').value='';saveT();renderT();toast('ההעברה נשמרה')};
 $('tnew').onclick=()=>{if(confirm('לנקות את ההעברה הנוכחית?')){T.items=[];T.note='';$('tnote').value='';saveT();renderT()}};
+T.items.forEach(norm);H.forEach(h=>h.items.forEach(norm));saveT();
 renderT();
 
 /* camera scan */
