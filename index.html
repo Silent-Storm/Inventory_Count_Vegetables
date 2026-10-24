@@ -35,6 +35,8 @@ input:focus{outline:3px solid var(--lime);border-color:var(--g2)}
 .tag.w{background:#ffe3b0;color:#7a4b00}
 .ctl{display:flex;gap:6px;margin-top:8px}.ctl input{flex:1;min-width:0;text-align:center;font-weight:800}.ctl .btn{padding:10px 12px}
 .meta{display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;font-size:12.5px;color:var(--mut);margin-top:6px}
+.ctl select{width:auto;max-width:44%;padding:8px 4px;font-size:14px}
+.pv{font-weight:800;color:var(--g2);font-size:15px;margin-top:6px}
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .meta a{color:var(--g2);text-decoration:underline;cursor:pointer}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
@@ -73,7 +75,7 @@ td.bc{direction:ltr;text-align:right;font-family:monospace}
 <main>
 <section class="view on" id="v-cnt">
  <div class="bar"><input id="q" type="search" placeholder="חיפוש לפי שם או ברקוד" autocomplete="off"><button class="btn l" id="scan">סרוק</button></div>
- <div class="stat"><div>נספרו <b id="s1">0</b></div><div>מתוך <b id="s2">0</b> מוצרים</div></div>
+ <div class="stat"><div>נספרו <b id="s1">0</b></div><div>מתוך <b id="s2">0</b> מוצרים</div><div style="margin-inline-start:auto">סה״כ <b id="s3">0</b> ק״ג</div></div>
  <div class="flt" id="flt"><button class="on" data-f="all">הכל</button><button data-f="todo">לא נספרו</button><button data-f="done">נספרו</button></div>
  <div id="list"></div>
 </section>
@@ -91,7 +93,7 @@ td.bc{direction:ltr;text-align:right;font-family:monospace}
   <div id="tform" style="display:none;border-top:2px solid var(--line);margin-top:8px;padding-top:8px">
    <b id="tname"></b>
    <div id="tboxrow"><label>סוג ארגז</label><select id="tsel"></select></div>
-   <label id="tqlbl">מספר ארגזים</label><input id="tbx" type="number" inputmode="decimal" min="0" step="any">
+   <label id="tqlbl">מספר ארגזים</label><input id="tbx" type="text" inputmode="decimal" autocomplete="off"><div class="pv" id="tpv"></div>
    <div class="ctl" style="margin-top:10px"><button class="btn" id="tadd" style="flex:2">+ הוספה</button><button class="btn o" id="tdone">סיום מוצר</button></div>
   </div>
  </div>
@@ -185,13 +187,16 @@ if(!S.url){S.url=DEF;save('yk_s',S)}
 if(!C){C={};const o=LS('yk_c',{});for(const b in o)C[b]=[{x:'q',n:+o[b]}];save('yk_c2',C)}
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const rnd=v=>Math.round(v*100)/100;
+const num=v=>parseFloat(String(v).replace(',','.'))||0;
+const LT={};
 const unit=p=>p.t==='w'?'ק״ג':'יח׳';
-const kk=p=>+(K[p.b]!==undefined?K[p.b]:(p.k||((BT[p.b]||[])[0]||{}).k))||0;
+const kk=p=>(opts(p)[0]||{}).k||0;
 const ent=p=>C[p.b]||[];
 const boxes=p=>rnd(ent(p).filter(e=>e.x==='b').reduce((a,e)=>a+e.n,0));
 const loose=p=>rnd(ent(p).filter(e=>e.x==='q').reduce((a,e)=>a+e.n,0));
-const tot=p=>rnd(ent(p).reduce((a,e)=>a+(e.x==='b'?e.n*kk(p):e.n),0));
-const detail=p=>{const bx=boxes(p),lo=loose(p),r=[];if(bx)r.push(`${bx} ארגזים × ${kk(p)}`);if(lo)r.push(`${lo} ${bx?'בודדים':unit(p)}`);return r.join(' + ')};
+const tot=p=>rnd(ent(p).reduce((a,e)=>a+(e.x==='b'?e.n*(e.k||kk(p)):e.n),0));
+const detail=p=>{const g={},r=[];ent(p).filter(e=>e.x==='b').forEach(e=>{const k=e.k||kk(p),key=(e.bt||'ארגז')+'|'+k;g[key]=rnd((g[key]||0)+e.n)});
+ Object.keys(g).forEach(key=>{const [n,k]=key.split('|');r.push(`${g[key]} × ${n} (${k})`)});const lo=loose(p);if(lo)r.push(`${lo} ${boxes(p)?'בודדים':unit(p)}`);return r.join(' + ')};
 const counted=()=>P.filter(p=>ent(p).length);
 let F='all';
 const dif=p=>rnd(tot(p)-p.s);
@@ -210,13 +215,14 @@ document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
  if(b.dataset.t==='rep')report();if(b.dataset.t==='trf')renderT();scrollTo(0,0)});
 
 /* product cards */
-function card(p){const e=ent(p),has=e.length,k=kk(p);
+function card(p){const e=ent(p),has=e.length,o=opts(p),k=kk(p);
  return `<div class="item ${has?'done':''}" data-b="${esc(p.b)}"><div class="top"><div class="n"><b>${esc(p.n)}<span class="tag ${p.t}">${unit(p)}</span></b><span>${esc(p.b)}</span></div>
  <div class="tt">${has?`${tot(p)} <small>${unit(p)}</small>`:''}${has&&p.s!=null?dfx(p):''}</div></div>
- <div class="ctl"><input type="number" inputmode="decimal" min="0" step="any" placeholder="${k?'מספר ארגזים':'כמות'}">
+ <div class="ctl">${o.length>1?`<select>${o.map((x,i)=>`<option value="${i}"${i===(LT[p.b]||0)?' selected':''}>${esc(x.n)} (${x.k})</option>`).join('')}</select>`:''}<input type="text" inputmode="decimal" autocomplete="off" placeholder="${k?'מספר ארגזים':'כמות'}">
  ${k?`<button class="btn" data-a="b">+ ארגזים</button><button class="btn o" data-a="q">+ ${p.t==='w'?'ק״ג':'בודדים'}</button>`:`<button class="btn" data-a="q">+ הוסף</button>`}</div>
- <div class="meta"><span>${k?`ארגז = ${k} ${unit(p)}`:''}${p.s!=null?`${k?' · ':''}במערכת: ${p.s}`:''}</span><span><a data-a="c">העתקה</a> · <a data-a="s">שיתוף</a> · <a data-a="k">${k?'שינוי גודל ארגז':'הגדרת ארגז'}</a></span></div>
- ${has?`<div class="chips">${e.map((x,i)=>`<span class="chip" data-a="d" data-i="${i}">${x.x==='b'?x.n+' ארגזים':x.n+' '+unit(p)} ✕</span>`).join('')}</div>`:''}</div>`}
+ <div class="pv"></div>
+ <div class="meta"><span>${k?(o.length>1?`${o.length} סוגי ארגז`:`ארגז = ${k} ${unit(p)}`):''}${p.s!=null?`${k?' · ':''}במערכת: ${p.s}`:''}</span><span><a data-a="c">העתקה</a> · <a data-a="s">שיתוף</a> · <a data-a="k">${k?'שינוי גודל ארגז':'הגדרת ארגז'}</a></span></div>
+ ${has?`<div class="chips">${e.map((x,i)=>`<span class="chip" data-a="d" data-i="${i}">${x.x==='b'?x.n+' ארגזים'+(x.bt&&x.bt!=='ארגז'?' · '+x.bt:''):x.n+' '+unit(p)} ✕</span>`).join('')}</div>`:''}</div>`}
 const cardEl=b=>[...$('list').children].find(x=>x.dataset&&x.dataset.b===b);
 function render(){
  const q=$('q').value.trim().toLowerCase();
@@ -225,23 +231,30 @@ function render(){
   :`<div class="empty">${P.length?'לא נמצא מוצר. אפשר להוסיף אותו ידנית בהגדרות.':'אין מוצרים עדיין.<br>בהגדרות הדביקו קישור לגיליון Google Sheets ולחצו "טעינת מוצרים".'}</div>`;
  stats();
 }
-function stats(){$('s1').textContent=counted().length;$('s2').textContent=P.length;$('sub').textContent=[S.branch,S.who].filter(Boolean).join(' · ')}
+function stats(){$('s3').textContent=rnd(P.filter(p=>p.t==='w').reduce((a,p)=>a+tot(p),0));$('s1').textContent=counted().length;$('s2').textContent=P.length;$('sub').textContent=[S.branch,S.who].filter(Boolean).join(' · ')}
 function upd(b,keep){save('yk_c2',C);save('yk_k',K);const p=P.find(x=>x.b===b),el=cardEl(b);
  if(el){el.outerHTML=card(p);if(keep){const n=cardEl(b);n&&n.querySelector('input').focus()}}stats()}
-function add(b,x,inp){const v=parseFloat(inp.value);if(!(v>0))return toast('הזינו כמות');
- const p=P.find(y=>y.b===b);if(x==='b'&&!kk(p))return toast('הגדירו קודם גודל ארגז');
- if((p.t==='u'||x==='b')&&v%1)return toast('כאן נדרש מספר שלם');
- (C[b]=C[b]||[]).push({x,n:rnd(v)});upd(b,true);navigator.vibrate&&navigator.vibrate(30)}
+function add(b,x,inp,sel){const v=num(inp.value);if(!(v>0))return toast('הזינו כמות');
+ const p=P.find(y=>y.b===b),o=opts(p);if(x==='b'&&!o.length)return toast('הגדירו קודם גודל ארגז');
+ if(x==='q'&&p.t==='u'&&v%1)return toast('כמות בודדים חייבת להיות שלמה');
+ const e={x,n:rnd(v)};
+ if(x==='b'){const i=sel?+sel.value:0,ty=o[i]||o[0];if(p.t==='u'&&rnd(v*ty.k)%1)return toast('התוצאה חייבת להיות מספר שלם של יחידות');e.k=ty.k;e.bt=ty.n;LT[b]=i}
+ (C[b]=C[b]||[]).push(e);upd(b,true);navigator.vibrate&&navigator.vibrate(30);
+ toast(x==='b'?`נוסף: ${e.n} × ${e.bt} (${e.k}) = ${rnd(e.n*e.k)} ${unit(p)}`:`נוסף: ${e.n} ${unit(p)}`)}
 $('list').addEventListener('click',e=>{const t=e.target.closest('[data-a]');if(!t)return;
  const it=t.closest('.item'),b=it.dataset.b,p=P.find(x=>x.b===b),a=t.dataset.a;
- if(a==='b'||a==='q')add(b,a,it.querySelector('input'));
+ if(a==='b'||a==='q')add(b,a,it.querySelector('input'),it.querySelector('select'));
  else if(a==='c')copyText(cpTxt(p));
  else if(a==='s')open('https://wa.me/?text='+encodeURIComponent(cpTxt(p)),'_blank');
  else if(a==='d'){C[b].splice(+t.dataset.i,1);if(!C[b].length)delete C[b];upd(b)}
  else if(a==='k'){const r=prompt(`כמה ${unit(p)} יש בארגז אחד? (0 = ללא ארגז)`,kk(p)||'');if(r===null)return;
-  const n=parseFloat(String(r).replace(',','.'));K[b]=n>0?n:0;upd(b)}});
+  const n=parseFloat(String(r).replace(',','.'));if(n>0)K[b]=n;else delete K[b];upd(b)}});
 $('list').addEventListener('keydown',e=>{if(e.key!=='Enter'||e.target.tagName!=='INPUT')return;
- const it=e.target.closest('.item'),p=P.find(x=>x.b===it.dataset.b);add(p.b,kk(p)?'b':'q',e.target)});
+ const it=e.target.closest('.item'),p=P.find(x=>x.b===it.dataset.b);add(p.b,kk(p)?'b':'q',e.target,it.querySelector('select'))});
+function pv(it){const p=P.find(x=>x.b===it.dataset.b),o=opts(p),el=it.querySelector('.pv');if(!el)return;const v=num(it.querySelector('input').value);
+ if(!(v>0)||!o.length){el.textContent='';return}const ty=o[+((it.querySelector('select')||{}).value||0)]||o[0];el.textContent=`ארגזים: ${v} × ${ty.k} = ${rnd(v*ty.k)} ${unit(p)}`}
+$('list').addEventListener('input',e=>{const it=e.target.closest('.item');it&&pv(it)});
+$('list').addEventListener('change',e=>{if(e.target.tagName==='SELECT'){const it=e.target.closest('.item');it&&pv(it)}});
 $('q').oninput=render;
 $('flt').onclick=e=>{const b=e.target.closest('[data-f]');if(!b)return;F=b.dataset.f;[...$('flt').children].forEach(x=>x.classList.toggle('on',x===b));render()};
 
@@ -344,7 +357,7 @@ const norm=i=>{if(!i.e){i.q=!i.bt;i.e=[i.q?(i.lo||0):(i.bx||0)].filter(x=>x>0);i
 const saveT=()=>{save('yk_t',T);save('yk_th',H)};
 const curT=()=>({no:tnum(),date:new Date().toLocaleString('he-IL'),from:T.from,to:T.to,note:T.note,items:T.items});
 let SEL=null;
-function opts(p){const l=(BT[p.b]||[]).slice();if(!l.length&&kk(p)>0)l.push({n:'ארגז',k:kk(p)});return l}
+function opts(p){const l=[];if(K[p.b]>0)l.push({n:'ארגז ידני',k:K[p.b]});(BT[p.b]||[]).forEach(x=>l.push(x));if(!l.length&&p.k>0)l.push({n:'ארגז',k:p.k});return l}
 function tSearch(auto){const q=$('tq').value.trim().toLowerCase();
  if(!q){$('tres').innerHTML='';return}
  const r=P.filter(p=>p.b===q||p.n.toLowerCase().includes(q)||p.b.includes(q)).slice(0,6);
@@ -353,14 +366,17 @@ function tSearch(auto){const q=$('tq').value.trim().toLowerCase();
 function pick(b){SEL=P.find(p=>p.b===b);if(!SEL)return;$('tres').innerHTML='';$('tq').value='';
  const o=opts(SEL);$('tform').style.display='block';$('tname').textContent=SEL.n+' · '+SEL.b;
  $('tsel').innerHTML=o.map((x,i)=>`<option value="${i}">${esc(x.n)} — ${x.k} ${unit(SEL)}</option>`).join('');
- $('tboxrow').style.display=o.length?'block':'none';$('tqlbl').textContent=o.length?'מספר ארגזים':'כמות ('+unit(SEL)+')';$('tbx').value='';$('tbx').focus()}
-function tAdd(){if(!SEL)return;const o=opts(SEL),v=parseFloat($('tbx').value)||0,q=!o.length;
+ $('tboxrow').style.display=o.length?'block':'none';$('tqlbl').textContent=o.length?'מספר ארגזים':'כמות ('+unit(SEL)+')';$('tbx').value='';tpv();$('tbx').focus()}
+function tpv(){const el=$('tpv');if(!SEL){el.textContent='';return}const o=opts(SEL),v=num($('tbx').value);
+ if(!(v>0)){el.textContent='';return}const ty=o[+$('tsel').value]||o[0];el.textContent=ty?`${v} × ${ty.k} = ${rnd(v*ty.k)} ${unit(SEL)}`:`${v} ${unit(SEL)}`}
+function tAdd(){if(!SEL)return;const o=opts(SEL),v=num($('tbx').value),q=!o.length;
  if(!(v>0))return toast('הזינו כמות');
- if((!q||SEL.t==='u')&&v%1)return toast('כאן נדרש מספר שלם');
- const ty=q?{n:'',k:1}:o[+$('tsel').value]||o[0];
+ const ty=q?{n:'',k:1}:(o[+$('tsel').value]||o[0]);
+ if(SEL.t==='u'&&rnd(v*ty.k)%1)return toast('התוצאה חייבת להיות מספר שלם של יחידות');
  let ex=T.items.find(i=>i.b===SEL.b&&i.bt===ty.n&&i.k===ty.k&&!!i.q===q);
  if(!ex){ex={b:SEL.b,n:SEL.n,t:SEL.t,bt:ty.n,k:ty.k,q,e:[]};T.items.unshift(ex)}
- ex.e.push(rnd(v));saveT();$('tbx').value='';renderT();navigator.vibrate&&navigator.vibrate(30);$('tbx').focus()}
+ ex.e.push(rnd(v));saveT();$('tbx').value='';tpv();renderT();
+ toast(q?`נוסף: ${v} ${unit(SEL)}`:`נוסף: ${v} × ${ty.n} (${ty.k}) = ${rnd(v*ty.k)} ${unit(SEL)}`);navigator.vibrate&&navigator.vibrate(30);$('tbx').focus()}
 function renderT(){const its=T.items;$('tno').textContent='העברה מס׳ '+tnum();
  if(!$('tfrom').value&&S.branch&&!T.from){$('tfrom').value=S.branch;T.from=S.branch;saveT()}
  $('titems').innerHTML=its.length?its.map((i,x)=>`<div class="item done"><div class="top"><div class="n"><b>${esc(i.n)}</b><span>${esc(i.b)}</span><div style="font-size:14px;margin-top:3px">${itLine(i)}</div></div><div class="tt">${itTot(i)} <small>${unitOf(i)}</small></div></div><div class="chips">${i.e.map((v,j)=>`<span class="chip" data-tc="${x}:${j}">${v} ${i.q?unitOf(i):'ארגזים'} ✕</span>`).join('')}</div><div class="meta"><span></span><a data-td="${x}">מחיקת המוצר</a></div></div>`).join(''):'<div class="empty">עדיין לא נוספו מוצרים להעברה.</div>';
@@ -385,7 +401,7 @@ const trRows=tr=>tr.items.map(i=>[i.b,i.n,i.q?'':(i.bt||'ארגז'),i.q?'':i.k,i
 [['tfrom','from'],['tto','to'],['tnote','note']].forEach(([id,k])=>{$(id).value=T[k]||'';$(id).onchange=()=>{T[k]=$(id).value.trim();saveT()}});
 $('tq').oninput=()=>tSearch(false);$('tq').onkeydown=e=>{if(e.key==='Enter')tSearch(true)};
 $('tres').onclick=e=>{const d=e.target.closest('[data-pk]');if(d)pick(d.dataset.pk)};
-$('tadd').onclick=tAdd;$('tbx').onkeydown=e=>{if(e.key==='Enter')tAdd()};
+$('tadd').onclick=tAdd;$('tbx').oninput=tpv;$('tsel').onchange=tpv;$('tbx').onkeydown=e=>{if(e.key==='Enter')tAdd()};
 $('tdone').onclick=()=>{SEL=null;$('tform').style.display='none';$('tq').focus()};
 $('titems').onclick=e=>{const c=e.target.closest('[data-tc]');
  if(c){const [x,j]=c.dataset.tc.split(':').map(Number);T.items[x].e.splice(j,1);if(!T.items[x].e.length)T.items.splice(x,1);saveT();renderT();return}
