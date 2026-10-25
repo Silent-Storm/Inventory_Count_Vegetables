@@ -143,7 +143,15 @@ td.bc{direction:ltr;text-align:right;font-family:monospace}
   <label>מספר וואטסאפ לשליחה (עם קידומת מדינה, למשל 972501234567)</label><input id="wanum" dir="ltr" inputmode="tel">
   <label>קישור Apps Script לשמירת הספירה בגיליון (אופציונלי)</label><input id="script" dir="ltr" placeholder="https://script.google.com/macros/s/.../exec">
   <details style="margin-top:8px"><summary>קוד להדבקה ב-Apps Script</summary>
-<pre>function doPost(e){
+<pre>function doGet(e){
+ var ss=SpreadsheetApp.getActive();
+ var sh=e.parameter.sheet?ss.getSheetByName(e.parameter.sheet):ss.getSheets()[0];
+ var out=JSON.stringify({rows:sh?sh.getDataRange().getDisplayValues():[]});
+ var cb=e.parameter.callback;
+ return ContentService.createTextOutput(cb?cb+'('+out+')':out)
+  .setMimeType(cb?ContentService.MimeType.JAVASCRIPT:ContentService.MimeType.JSON);
+}
+function doPost(e){
  var d=JSON.parse(e.postData.contents);
  var ss=SpreadsheetApp.getActive();
  if(d.kind==='transfer'){
@@ -267,11 +275,11 @@ function parseCSV(s){const r=[];let row=[],c='',q=false;
   else if(ch==='"')q=true;else if(ch===','){row.push(c);c=''}
   else if(ch==='\n'){row.push(c);r.push(row);row=[];c=''}else if(ch!=='\r')c+=ch}
  row.push(c);r.push(row);return r.filter(x=>x.some(y=>y.trim()))}
-function jsonp(u){return new Promise((ok,no)=>{const cb='ykcb'+Date.now(),el=document.createElement('script');
+function jsonp(u,as){return new Promise((ok,no)=>{const cb='ykcb'+Date.now(),el=document.createElement('script');
  const cl=()=>{clearTimeout(t);delete window[cb];el.remove()};const t=setTimeout(()=>{cl();no('timeout')},12000);
- window[cb]=r=>{cl();ok(r)};el.onerror=()=>{cl();no('load')};el.src=u+'&tqx=out:json;responseHandler:'+cb;document.head.appendChild(el)})}
+ window[cb]=r=>{cl();ok(r)};el.onerror=()=>{cl();no('load')};el.src=u+(as?'&callback=':'&tqx=out:json;responseHandler:')+cb;document.head.appendChild(el)})}
 function tbl(r){const t=r.table;const lab=t.cols.map(c=>(c.label||'').trim());
- const data=t.rows.map(x=>(x.c||[]).map(c=>{if(!c||c.v==null)return '';let v=c.f!=null?String(c.f):String(c.v);return /^[\d,]+$/.test(v)?v.replace(/,/g,''):v}));
+ const data=t.rows.map(x=>(x.c||[]).map(c=>{if(!c||c.v==null)return '';let v=c.f!=null?String(c.f):String(c.v);return /^\d{1,3}(,\d{3})+$/.test(v)?v.replace(/,/g,''):v}));
  return lab.some(Boolean)?[lab,...data]:data}
 function ingest(rows,quiet){
  try{save('yk_raw',rows)}catch(e){}
@@ -299,6 +307,7 @@ $('load').onclick=async()=>{
  S.url=$('url').value;S.tab=$('tab').value;save('yk_s',S);
  const base=`https://docs.google.com/spreadsheets/d/${m[1]}/gviz/tq?headers=1`+(S.tab?`&sheet=${encodeURIComponent(S.tab)}`:'');
  toast('טוען...');
+ if(S.script){try{S.via='Apps Script';const r=await jsonp(S.script+'?sheet='+encodeURIComponent(S.tab||'')+'&t='+Date.now(),true);if(r&&r.rows&&r.rows.length){ingest(r.rows);loadBoxes(m[1]);return}}catch(e){}}
  try{S.via='ישיר';ingest(tbl(await jsonp(base)));loadBoxes(m[1]);return}catch(e){}
  try{const r=await fetch(base+'&tqx=out:csv&_='+Date.now(),{cache:'no-store'});if(!r.ok)throw 0;S.via='CSV';ingest(parseCSV(await r.text()));loadBoxes(m[1]);return}catch(e){}
  toast('הטעינה נכשלה. שתפו את הגיליון ל"כל מי שיש לו הקישור" או ייבאו קובץ CSV')};
@@ -311,7 +320,10 @@ function ingestBoxes(rows){const h=rows[0].map(x=>x.trim().toLowerCase());
  if(ib<0)ib=0;if(it<0||it===ib)it=1;if(ik<0)ik=2;
  const nb={};rows.slice(1).forEach(r=>{const b=(r[ib]||'').trim(),n=(r[it]||'').trim(),k=parseFloat(String(r[ik]||'').replace(',','.'))||0;if(b&&n&&k>0)(nb[b]=nb[b]||[]).push({n,k})});
  BT=nb;save('yk_bt',BT);render();return Object.values(nb).reduce((a,x)=>a+x.length,0)}
-async function loadBoxes(id){try{const r=tbl(await jsonp(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?headers=1&sheet=${encodeURIComponent(S.btab||'ארגזים')}`));
+async function loadBoxes(id){try{
+ if(S.script&&S.via==='Apps Script'){const q=await jsonp(S.script+'?sheet='+encodeURIComponent(S.btab||'ארגזים')+'&t='+Date.now(),true);
+  if(q&&q.rows&&q.rows.length&&isBoxH(q.rows[0].map(x=>String(x).trim().toLowerCase()))){toast(`נטענו ${ingestBoxes(q.rows)} סוגי ארגזים`)}return}
+ const r=tbl(await jsonp(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?headers=1&sheet=${encodeURIComponent(S.btab||'ארגזים')}`));
  if(!isBoxH(r[0].map(x=>x.trim().toLowerCase())))return;toast(`נטענו ${ingestBoxes(r)} סוגי ארגזים`)}catch(e){}}
 function showSync(){$('syncinfo').textContent=S.sync?'עודכן לאחרונה: '+new Date(S.sync).toLocaleString('he-IL')+(S.via?' · '+S.via:''):''}
 $('tp').onclick=()=>{const t='\ufeffברקוד,שם מוצר,סוג מכירה,כמות בארגז,מלאי במערכת\n7290000000011,עגבניות,משקל,14,120\n7290000000028,מלפפון,משקל,10,80\n7290000000035,חסה,יחידה,12,60\n';const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/csv'}));a.download='תבנית-גיליון.csv';a.click()};
