@@ -181,13 +181,14 @@ td.bc{direction:ltr;text-align:right;font-family:monospace}
 const $=id=>document.getElementById(id);
 const LS=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k));return v===null?d:v}catch(e){return d}};
 const save=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
-let P=LS('yk_p',[]),S=LS('yk_s',{}),K=LS('yk_k',{}),C=LS('yk_c2',null),BT=LS('yk_bt',{}),T=LS('yk_t',null),H=LS('yk_th',[]);
+let P=LS('yk_p',[]),S=LS('yk_s',{}),K=LS('yk_k',{}),C=LS('yk_c2',null),BT=LS('yk_bt',{}),T=LS('yk_t',null),H=LS('yk_th',[]),TYO=LS('yk_ty',{});
 if(!T)T={from:'',to:'',note:'',items:[]};
 const DEF='https://docs.google.com/spreadsheets/d/1Ysb5uBnmCpYHoY2v3RVh1jdMo9jDGphSn6y7N36kuLM/edit?usp=sharing';
 if(!S.url){S.url=DEF;save('yk_s',S)}
 if(!C){C={};const o=LS('yk_c',{});for(const b in o)C[b]=[{x:'q',n:+o[b]}];save('yk_c2',C)}
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const rnd=v=>Math.round(v*100)/100;
+const ctype=ty=>/משקל|קג|קילו|kg|weight|גרם|kilo/.test(String(ty).replace(/[\u200e\u200f\u202a-\u202e"״”'׳]/g,'').toLowerCase())?'w':'u';
 const num=v=>parseFloat(String(v).replace(',','.'))||0;
 const LT={};
 const unit=p=>p.t==='w'?'ק״ג':'יח׳';
@@ -217,7 +218,7 @@ document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
 
 /* product cards */
 function card(p){const e=ent(p),has=e.length,o=opts(p),k=kk(p);
- return `<div class="item ${has?'done':''}" data-b="${esc(p.b)}"><div class="top"><div class="n"><b>${esc(p.n)}<span class="tag ${p.t}">${unit(p)}</span></b><span>${esc(p.b)}</span></div>
+ return `<div class="item ${has?'done':''}" data-b="${esc(p.b)}"><div class="top"><div class="n"><b>${esc(p.n)}<span class="tag ${p.t}" data-a="ty" style="cursor:pointer">${unit(p)} ⇄</span></b><span>${esc(p.b)}</span></div>
  <div class="tt">${has?`${tot(p)} <small>${unit(p)}</small>`:''}${has&&p.s!=null?dfx(p):''}</div></div>
  <div class="ctl">${o.length>1?`<select>${o.map((x,i)=>`<option value="${i}"${i===(LT[p.b]||0)?' selected':''}>${esc(x.n)} (${x.k})</option>`).join('')}</select>`:''}<input type="text" inputmode="decimal" autocomplete="off" placeholder="${k?'מספר ארגזים':'כמות'}">
  ${k?`<button class="btn" data-a="b">+ ארגזים</button><button class="btn o" data-a="q">+ ${p.t==='w'?'ק״ג':'בודדים'}</button>`:`<button class="btn" data-a="q">+ הוסף</button>`}</div>
@@ -245,6 +246,7 @@ function add(b,x,inp,sel){const v=num(inp.value);if(!(v>0))return toast('הזי�
 $('list').addEventListener('click',e=>{const t=e.target.closest('[data-a]');if(!t)return;
  const it=t.closest('.item'),b=it.dataset.b,p=P.find(x=>x.b===b),a=t.dataset.a;
  if(a==='b'||a==='q')add(b,a,it.querySelector('input'),it.querySelector('select'));
+ else if(a==='ty'){p.t=p.t==='w'?'u':'w';TYO[b]=p.t;save('yk_ty',TYO);save('yk_p',P);upd(b);toast(`סוג המכירה שונה ל${p.t==='w'?'משקל':'יחידה'}`)}
  else if(a==='c')copyText(cpTxt(p));
  else if(a==='s')open('https://wa.me/?text='+encodeURIComponent(cpTxt(p)),'_blank');
  else if(a==='d'){C[b].splice(+t.dataset.i,1);if(!C[b].length)delete C[b];upd(b)}
@@ -282,14 +284,15 @@ function ingest(rows,quiet){
  const mp=(key,cur)=>M[key]!==undefined&&M[key]!==''?+M[key]:cur;
  ib=mp('b',ib);inn=mp('n',inn);it=mp('t',it);ik=mp('k',ik);is=mp('s',is);
  S.det={b:ib,n:inn,t:it,k:ik,s:is};
- const np=rows.slice(1).map(r=>{const ty=(r[it]||'').trim();return{b:(r[ib]||'').trim(),n:(r[inn]||'').trim(),t:/משקל|ק"?ג|קילו|kg|weight/i.test(ty)?'w':'u',k:ik>=0?num(r[ik]):0,s:is>=0?(String(r[is]||'').trim()===''?null:num(r[is])):null}}).filter(p=>p.b&&p.n);
+ const np=rows.slice(1).map(r=>{const ty=(r[it]||'').trim();return{b:(r[ib]||'').trim(),n:(r[inn]||'').trim(),t:TYO[(r[ib]||'').trim()]||ctype(ty),k:ik>=0?num(r[ik]):0,s:is>=0?(String(r[is]||'').trim()===''?null:num(r[is])):null}}).filter(p=>p.b&&p.n);
  if(!np.length)throw 'empty';
  P=np;save('yk_p',P);if(!quiet)S.sync=Date.now();save('yk_s',S);showSync();render();renderMap();
  if(!quiet){toast(`נטענו ${P.length} מוצרים · ${P.filter(p=>p.k>0).length} עם כמות בארגז`);document.querySelector('[data-t=cnt]').click()}}
 function renderMap(){const hd=S.hdr||[],box=$('mapbox');if(!hd.length){box.style.display='none';return}box.style.display='block';
  const d=S.det||{},F=[['b','ברקוד'],['n','שם מוצר'],['t','סוג מכירה (יחידה / משקל)'],['k','כמות בארגז'],['s','מלאי במערכת (אופציונלי)']];
  $('mapsel').innerHTML=F.map(([k,l])=>`<label>${l}</label><select data-m="${k}">${(k==='k'||k==='s'?'<option value="-1">ללא</option>':'')+hd.map((x,i)=>`<option value="${i}"${i===d[k]?' selected':''}>${esc(x||('עמודה '+(i+1)))}</option>`).join('')}</select>`).join('');
- $('mapinfo').textContent=`${P.length} מוצרים · ${P.filter(p=>p.k>0).length} עם כמות בארגז`+(d.k<0?' · עמודת "כמות בארגז" לא זוהתה, בחרו אותה ידנית':'')}
+ const raw=LS('yk_raw',null),vc={};if(raw&&d.t>=0)raw.slice(1).forEach(r=>{const v=String(r[d.t]||'').trim()||'(ריק)';vc[v]=(vc[v]||0)+1});
+ $('mapinfo').innerHTML=`${P.length} מוצרים · ${P.filter(p=>p.t==='w').length} במשקל · ${P.filter(p=>p.t!=='w').length} ביחידה · ${P.filter(p=>p.k>0).length} עם כמות בארגז`+(d.k<0?' · עמודת "כמות בארגז" לא זוהתה, בחרו אותה ידנית':'')+`<br>ערכים בעמודת סוג המכירה: `+(Object.keys(vc).slice(0,8).map(k=>`<b>${esc(k)}</b> ×${vc[k]}`).join(' · ')||'—')+`<br>אפשר להחליף סוג מכירה למוצר בודד בלחיצה על התג שלו (⇄) בטאב הספירה.`}
 $('mapsel').onchange=e=>{const t=e.target;if(!t.dataset.m)return;S.map=S.map||{};S.map[t.dataset.m]=t.value;save('yk_s',S);const raw=LS('yk_raw',null);if(raw){try{ingest(raw,true);toast('המיפוי עודכן')}catch(x){toast('המיפוי לא תקין')}}};
 $('mapreset').onclick=()=>{S.map={};save('yk_s',S);const raw=LS('yk_raw',null);if(raw){try{ingest(raw,true);toast('המיפוי אופס')}catch(x){}}};
 $('load').onclick=async()=>{
